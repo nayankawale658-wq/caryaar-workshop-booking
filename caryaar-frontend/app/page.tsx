@@ -15,40 +15,48 @@ export default function Page() {
 
   const BACKEND_URL = "https://real-adults-cut.loca.lt";
 
-  useEffect(() => {
-    async function fetchSlots() {
-      try {
-        setLoading(true);
-        const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
-          method: "GET",
-          headers: {
-            "Bypass-Tunnel-Reminder": "true",
-            "Content-Type": "application/json"
-          }
-        });
-        
-        if (!response.ok) throw new Error("Server dropped network package handshake.");
-        
-        const data = await response.json();
-        setSlots(data);
-        if (data.length > 0) {
-          setSelectedSlot(data[0].slot_time);
+  // Re-fetch current database slots whenever workshop changes
+  const fetchSlotsAndData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
+        method: "GET",
+        headers: {
+          "Bypass-Tunnel-Reminder": "true",
+          "Content-Type": "application/json"
         }
-        setError(null);
-      } catch (err) {
-        console.error(err);
-        setError("Could not connect to live database backend tunnel.");
-      } finally {
-        setLoading(false);
+      });
+      
+      if (!response.ok) throw new Error("Could not fetch slot rows.");
+      
+      const data = await response.json();
+      setSlots(data);
+      
+      // Auto-select first available open window
+      const openSlot = data.find(s => s.available_bays > 0);
+      if (openSlot) {
+        setSelectedSlot(openSlot.slot_time);
+      } else if (data.length > 0) {
+        setSelectedSlot(data[0].slot_time);
       }
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Could not connect to live database backend tunnel.");
+    } finally {
+      setLoading(false);
     }
-    fetchSlots();
+  };
+
+  useEffect(() => {
+    fetchSlotsAndData();
   }, [workshop]);
 
+  // Handle Form submission straight to Supabase
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!selectedSlot) {
-      alert("Please select a valid time slot.");
+      alert("Please select a timing window.");
       return;
     }
 
@@ -70,17 +78,49 @@ export default function Page() {
         body: JSON.stringify(bookingPayload)
       });
 
-      if (!response.ok) throw new Error("Data submission to Supabase routing channels failed.");
+      if (!response.ok) {
+        const errDetail = await response.json();
+        throw new Error(errDetail.detail || "Booking failed.");
+      }
 
       const result = await response.json();
-      alert(`🎉 Booking Confirmed Successfully!\n\nYour record has been processed by your backend server.`);
+      alert(`🎉 Booking Confirmed!\n\nSaved live into Supabase with unique internal ID #${result.id}`);
       
+      // Add record instantly to the monitoring screen view
       setMyBookings((prev) => [result, ...prev]);
+      
+      // Refresh database bay capacities counts
+      fetchSlotsAndData();
+
       setName("");
       setPhone("");
       setCarReg("");
     } catch (err) {
-      alert(`❌ Sync Error: ${err.message}`);
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
+  // Handle Cancellation Request (Deletes live row out of database)
+  const handleCancel = async (bookingId) => {
+    if (!confirm(`Are you sure you want to delete Booking ticket #${bookingId} from Supabase?`)) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/bookings/${bookingId}`, {
+        method: "DELETE",
+        headers: { "Bypass-Tunnel-Reminder": "true" }
+      });
+
+      if (!response.ok) throw new Error("Failed to process delete command on backend.");
+
+      alert(`🗑️ Ticket #${bookingId} successfully cancelled and row deleted from Supabase!`);
+      
+      // Remove from frontend view state list array
+      setMyBookings((prev) => prev.filter(b => b.id !== bookingId));
+      
+      // Refresh database counts to free up the slot bay instantly
+      fetchSlotsAndData();
+    } catch (err) {
+      alert(`❌ Cancellation Error: ${err.message}`);
     }
   };
 
@@ -91,6 +131,7 @@ export default function Page() {
         <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Database Sync Engine via Vercel Cloud</p>
       </header>
 
+      {/* BLOCK A: BOOKING INTERFACE */}
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
@@ -98,10 +139,7 @@ export default function Page() {
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Customer Name:</label>
             <input 
-              type="text" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              required 
+              type="text" value={name} onChange={(e) => setName(e.target.value)} required 
               placeholder="Enter full name"
               style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
             />
@@ -110,10 +148,7 @@ export default function Page() {
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Contact Number:</label>
             <input 
-              type="tel" 
-              value={phone} 
-              onChange={(e) => setPhone(e.target.value)} 
-              required 
+              type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required 
               placeholder="Enter 10-digit mobile number"
               style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
             />
@@ -122,10 +157,7 @@ export default function Page() {
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Vehicle Registration Number:</label>
             <input 
-              type="text" 
-              value={carReg} 
-              onChange={(e) => setCarReg(e.target.value)} 
-              required 
+              type="text" value={carReg} onChange={(e) => setCarReg(e.target.value)} required 
               placeholder="e.g., MH-43-AA-1111"
               style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
             />
@@ -134,8 +166,7 @@ export default function Page() {
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Select Workshop Station:</label>
             <select 
-              value={workshop} 
-              onChange={(e) => setWorkshop(e.target.value)}
+              value={workshop} onChange={(e) => setWorkshop(e.target.value)}
               style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
             >
               <option value="1">Main Workshop Vashi</option>
@@ -152,13 +183,12 @@ export default function Page() {
               <p style={{ color: "#dc2626", margin: "5px 0" }}>⚠️ {error}</p>
             ) : (
               <select 
-                value={selectedSlot} 
-                onChange={(e) => setSelectedSlot(e.target.value)}
+                value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)}
                 style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
               >
                 {slots.map((s) => (
                   <option key={s.slot_time} value={s.slot_time} disabled={s.available_bays <= 0}>
-                    {new Date(s.slot_time).toLocaleString()} ({s.available_bays} Bays Open)
+                    {new Date(s.slot_time).toLocaleString()} ({s.available_bays} / 2 Bays Open) {s.available_bays <= 0 ? "[FULLY BOOKED]" : ""}
                   </option>
                 ))}
               </select>
@@ -166,8 +196,7 @@ export default function Page() {
           </div>
 
           <button 
-            type="submit" 
-            disabled={loading || !!error}
+            type="submit" disabled={loading || !!error}
             style={{ width: "100%", padding: "12px", backgroundColor: (loading || !!error) ? "#9ca3af" : "#1e3a8a", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}
           >
             Confirm Vehicle Slot Booking
@@ -175,19 +204,26 @@ export default function Page() {
         </form>
       </main>
 
+      {/* BLOCK B: LIVE ACTIVE AUTHORIZATION PANELS */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
         {myBookings.length === 0 ? (
           <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active sessions recorded in this panel view instance yet.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {myBookings.map((b, index) => (
-              <div key={index} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fef2f2" }}>
+            {myBookings.map((b) => (
+              <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fef2f2" }}>
                 <div>
-                  <span style={{ fontWeight: "bold", color: "#111827" }}>Confirmed Slot</span> — {b.customer_name} ({b.car_registration})
+                  <span style={{ fontWeight: "bold", color: "#111827" }}>Ticket #{b.id}</span> — {b.customer_name} ({b.car_registration})
                   <br />
                   <small style={{ color: "#4b5563" }}>Time: {new Date(b.slot_time).toLocaleString()}</small>
                 </div>
+                <button 
+                  onClick={() => handleCancel(b.id)}
+                  style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
+                >
+                  Authorize Cancel
+                </button>
               </div>
             ))}
           </div>
