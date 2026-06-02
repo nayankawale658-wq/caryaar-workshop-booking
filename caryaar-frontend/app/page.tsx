@@ -13,9 +13,10 @@ export default function Page() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Your verified live tunnel endpoint link
   const BACKEND_URL = "https://real-adults-cut.loca.lt";
 
-  // Re-fetch current database slots whenever workshop changes
+  // Fetch current available slot rows directly from your FastAPI server
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
@@ -23,16 +24,18 @@ export default function Page() {
         method: "GET",
         headers: {
           "Bypass-Tunnel-Reminder": "true",
-          "Content-Type": "application/json"
+          "cors-proxy-bypass": "true",
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         }
       });
       
-      if (!response.ok) throw new Error("Could not fetch slot rows.");
+      if (!response.ok) throw new Error("Server dropped handshake packet validation data.");
       
       const data = await response.json();
       setSlots(data);
       
-      // Auto-select first available open window
+      // Auto-point to the first slot that has open bays
       const openSlot = data.find(s => s.available_bays > 0);
       if (openSlot) {
         setSelectedSlot(openSlot.slot_time);
@@ -52,11 +55,11 @@ export default function Page() {
     fetchSlotsAndData();
   }, [workshop]);
 
-  // Handle Form submission straight to Supabase
+  // Handle live submission to Supabase database
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!selectedSlot) {
-      alert("Please select a timing window.");
+      alert("Please choose a valid timing window first.");
       return;
     }
 
@@ -73,7 +76,9 @@ export default function Page() {
         method: "POST",
         headers: {
           "Bypass-Tunnel-Reminder": "true",
-          "Content-Type": "application/json"
+          "cors-proxy-bypass": "true",
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         },
         body: JSON.stringify(bookingPayload)
       });
@@ -84,40 +89,44 @@ export default function Page() {
       }
 
       const result = await response.json();
-      alert(`🎉 Booking Confirmed!\n\nSaved live into Supabase with unique internal ID #${result.id}`);
+      alert(`🎉 Booking Confirmed!\n\nSaved live into Supabase with Ticket ID #${result.id}`);
       
-      // Add record instantly to the monitoring screen view
+      // Push record instantly onto the tracking log panel view
       setMyBookings((prev) => [result, ...prev]);
       
-      // Refresh database bay capacities counts
+      // Force refresh database slot capacity choices instantly
       fetchSlotsAndData();
 
+      // Clear layout fields cleanly
       setName("");
       setPhone("");
       setCarReg("");
     } catch (err) {
-      alert(`❌ Error: ${err.message}`);
+      alert(`❌ Submission Error: ${err.message}`);
     }
   };
 
-  // Handle Cancellation Request (Deletes live row out of database)
+  // Handle Cancellation request line (Deletes data straight out of Supabase table rows)
   const handleCancel = async (bookingId) => {
-    if (!confirm(`Are you sure you want to delete Booking ticket #${bookingId} from Supabase?`)) return;
+    if (!confirm(`Are you sure you want to authorize cancellation for Ticket #${bookingId}?`)) return;
 
     try {
       const response = await fetch(`${BACKEND_URL}/bookings/${bookingId}`, {
         method: "DELETE",
-        headers: { "Bypass-Tunnel-Reminder": "true" }
+        headers: { 
+          "Bypass-Tunnel-Reminder": "true",
+          "cors-proxy-bypass": "true"
+        }
       });
 
-      if (!response.ok) throw new Error("Failed to process delete command on backend.");
+      if (!response.ok) throw new Error("Failed to drop database target index item row.");
 
-      alert(`🗑️ Ticket #${bookingId} successfully cancelled and row deleted from Supabase!`);
+      alert(`🗑️ Ticket #${bookingId} canceled and dropped from Supabase tables successfully!`);
       
-      // Remove from frontend view state list array
+      // Update screen state array listing rows
       setMyBookings((prev) => prev.filter(b => b.id !== bookingId));
       
-      // Refresh database counts to free up the slot bay instantly
+      // Sync layout dropdown limits back up immediately
       fetchSlotsAndData();
     } catch (err) {
       alert(`❌ Cancellation Error: ${err.message}`);
@@ -131,7 +140,7 @@ export default function Page() {
         <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Database Sync Engine via Vercel Cloud</p>
       </header>
 
-      {/* BLOCK A: BOOKING INTERFACE */}
+      {/* SECTION 1: SYSTEM BOOKING INTERFACE PANEL */}
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
@@ -204,7 +213,7 @@ export default function Page() {
         </form>
       </main>
 
-      {/* BLOCK B: LIVE ACTIVE AUTHORIZATION PANELS */}
+      {/* SECTION 2: LIVE RUNTIME MANAGEMENT OPERATOR PANEL */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
         {myBookings.length === 0 ? (
@@ -216,7 +225,7 @@ export default function Page() {
                 <div>
                   <span style={{ fontWeight: "bold", color: "#111827" }}>Ticket #{b.id}</span> — {b.customer_name} ({b.car_registration})
                   <br />
-                  <small style={{ color: "#4b5563" }}>Time: {new Date(b.slot_time).toLocaleString()}</small>
+                  <small style={{ color: "#4b5563" }}>Allocated Time: {new Date(b.slot_time).toLocaleString()}</small>
                 </div>
                 <button 
                   onClick={() => handleCancel(b.id)}
