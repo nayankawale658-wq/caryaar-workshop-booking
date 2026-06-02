@@ -10,115 +10,96 @@ export default function Page() {
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [myBookings, setMyBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Generate 3 days of hourly slots completely on the frontend (No backend needed!)
+  const BACKEND_URL = "https://real-adults-cut.loca.lt";
+
+  // Fetch available slots from your live FastAPI backend
   useEffect(() => {
-    const generatedSlots = [];
-    const now = new Date();
-    
-    // Generate slots for today, tomorrow, and the day after
-    for (let day = 0; day < 3; day++) {
-      const targetDate = new Date();
-      targetDate.setDate(now.getDate() + day);
-      
-      // Creating standard workshop hours from 9:00 AM to 5:00 PM
-      for (let hour = 9; hour <= 17; hour++) {
-        const slotTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hour, 0, 0);
+    async function fetchSlots() {
+      try {
+        setLoading(true);
+        // Added standard bypass headers so localtunnel doesn't show a warning page to Vercel
+        const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
+          headers: {
+            "Bypass-Tunnel-Reminder": "true",
+            "Content-Type": "application/json"
+          }
+        });
         
-        // Skip hours that have already passed today
-        if (slotTime > now) {
-          generatedSlots.push({
-            slot_time: slotTime.toISOString(),
-            available_bays: 2, // Default maximum workshop capacity
-            is_available: true
-          });
+        if (!response.ok) throw new Error("Failed to load time slots from database server.");
+        
+        const data = await response.json();
+        setSlots(data);
+        if (data.length > 0) {
+          setSelectedSlot(data[0].slot_time);
         }
+        setError(null);
+      } catch (err) {
+        console.error(err);
+        setError("Could not connect to live database backend tunnel.");
+      } finally {
+        setLoading(false);
       }
     }
-    setSlots(generatedSlots);
-    if (generatedSlots.length > 0) {
-      setSelectedSlot(generatedSlots[0].slot_time);
-    }
-  }, [workshop]); // Re-calculates cleanly if workshop changes
+    fetchSlots();
+  }, [workshop]);
 
-  // Handle Form Submission smoothly entirely on frontend state
-  const handleBooking = (e) => {
+  // Handle live submission to Supabase via backend
+  const handleBooking = async (e) => {
     e.preventDefault();
     if (!selectedSlot) {
-      alert("Please select a valid time slot first!");
+      alert("Please select a valid time slot.");
       return;
     }
 
-    // Generate a clean random ticket ID number for your presentation reference
-    const mockTicketId = Math.floor(1000 + Math.random() * 9000);
-
-    const newBookingRecord = {
-      id: mockTicketId,
+    const bookingPayload = {
       customer_name: name,
       customer_phone: phone,
       car_registration: carReg,
       slot_time: selectedSlot,
-      workshop_id: workshop
+      workshop_id: parseInt(workshop)
     };
 
-    // Update capacity counts dynamically for the chosen slot in your dropdown
-    setSlots(prevSlots => 
-      prevSlots.map(slot => {
-        if (slot.slot_time === selectedSlot) {
-          const updatedBays = slot.available_bays - 1;
-          return {
-            ...slot,
-            available_bays: updatedBays,
-            is_available: updatedBays > 0
-          };
-        }
-        return slot;
-      })
-    );
+    try {
+      const response = await fetch(`${BACKEND_URL}/bookings`, {
+        method: "POST",
+        headers: {
+          "Bypass-Tunnel-Reminder": "true",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(bookingPayload)
+      });
 
-    // Save to active bookings console array instantly
-    setMyBookings([...myBookings, newBookingRecord]);
-    
-    alert(`🎉 Booking Confirmed Successfully!\n\nYour Unique Ticket ID is: #${mockTicketId}\n\nThis session has been registered in the tracking panel below.`);
-    
-    // Reset all form entry fields
-    setName("");
-    setPhone("");
-    setCarReg("");
-  };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Booking failed.");
+      }
 
-  // Handle Cancellation manually
-  const handleCancel = (bookingId, slotTimeOfBooking) => {
-    if (!confirm("Are you sure you want to authorize cancellation for this vehicle slot?")) return;
-
-    // Remove from active list console state
-    setMyBookings(myBookings.filter(b => b.id !== bookingId));
-
-    // Restore the available bay slot capacity count dynamically
-    setSlots(prevSlots => 
-      prevSlots.map(slot => {
-        if (slot.slot_time === slotTimeOfBooking) {
-          return {
-            ...slot,
-            available_bays: Math.min(slot.available_bays + 1, 2),
-            is_available: true
-          };
-        }
-        return slot;
-      })
-    );
-
-    alert("🗑️ Booking successfully cancelled and slot freed!");
+      const result = await response.json();
+      alert(`🎉 Booking Confirmed Successfully!\n\nYour record has been saved live into Supabase.`);
+      
+      // Add the new booking record to the live list display panel
+      setMyBookings((prev) => [result, ...prev]);
+      
+      // Clear form inputs cleanly
+      setName("");
+      setPhone("");
+      setCarReg("");
+    } catch (err) {
+      alert(`❌ Error: ${err.message}`);
+    }
   };
 
   return (
     <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "700px", margin: "0 auto" }}>
       <header style={{ borderBottom: "2px solid #eaeaea", paddingBottom: "10px", marginBottom: "30px" }}>
         <h1 style={{ color: "#1e3a8a", margin: 0 }}>🚗 CarYaar Management Studio</h1>
-        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>End-to-End Local Workspace Session</p>
+        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Database Sync Engine via Vercel Cloud</p>
       </header>
 
-      {/* BLOCK A: THE BOOKING PANEL */}
+      {/* THE BOOKING PANEL */}
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
@@ -172,53 +153,52 @@ export default function Page() {
             </select>
           </div>
 
-          {/* HIGHLY OPTIMIZED FRONTEND TIME WINDOW DROPDOWN */}
           <div style={{ fontVariantNumeric: "lining-nums", marginBottom: "20px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Select Available Timing Window:</label>
-            <select 
-              value={selectedSlot} 
-              onChange={(e) => setSelectedSlot(e.target.value)}
-              style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
-            >
-              {slots.map((s) => (
-                <option key={s.slot_time} value={s.slot_time} disabled={!s.is_available}>
-                  {new Date(s.slot_time).toLocaleString()} ({s.available_bays} Bays Open) {!s.is_available ? "[FULLY BOOKED]" : ""}
-                </option>
-              ))}
-            </select>
+            {loading ? (
+              <p style={{ color: "#2563eb", margin: "5px 0" }}>📡 Scanning live database channels...</p>
+            ) : error ? (
+              <p style={{ color: "#dc2626", margin: "5px 0" }}>⚠️ {error}</p>
+            ) : (
+              <select 
+                value={selectedSlot} 
+                onChange={(e) => setSelectedSlot(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
+              >
+                {slots.map((s) => (
+                  <option key={s.slot_time} value={s.slot_time} disabled={s.available_bays <= 0}>
+                    {new Date(s.slot_time).toLocaleString()} ({s.available_bays} Bays Open)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button 
             type="submit" 
-            style={{ width: "100%", padding: "12px", backgroundColor: "#1e3a8a", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}
+            disabled={loading || !!error}
+            style={{ width: "100%", padding: "12px", backgroundColor: (loading || !!error) ? "#9ca3af" : "#1e3a8a", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}
           >
             Confirm Vehicle Slot Booking
           </button>
         </form>
       </main>
 
-      {/* BLOCK B: LIVE ACTIVE CONSOLE */}
+      {/* LIVE ACTIVE CONSOLE */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
-        <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "15px" }}>Manage row sessions deployed below in real time:</p>
-
+        
         {myBookings.length === 0 ? (
           <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active sessions recorded in this panel view instance yet.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {myBookings.map((b) => (
-              <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fef2f2" }}>
-                <div style={{ flexGrow: 1 }}>
-                  <span style={{ fontWeight: "bold", color: "#111827" }}>Ticket #{b.id}</span> — {b.customer_name} ({b.car_registration})
+            {myBookings.map((b, index) => (
+              <div key={index} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fef2f2" }}>
+                <div>
+                  <span style={{ fontWeight: "bold", color: "#111827" }}>Confirmed Slot</span> — {b.customer_name} ({b.car_registration})
                   <br />
-                  <small style={{ color: "#4b5563" }}>Phone: {b.customer_phone} | Time: {new Date(b.slot_time).toLocaleString()}</small>
+                  <small style={{ color: "#4b5563" }}>Time: {new Date(b.slot_time).toLocaleString()}</small>
                 </div>
-                <button 
-                  onClick={() => handleCancel(b.id, b.slot_time)}
-                  style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
-                >
-                  Authorize Cancel
-                </button>
               </div>
             ))}
           </div>
