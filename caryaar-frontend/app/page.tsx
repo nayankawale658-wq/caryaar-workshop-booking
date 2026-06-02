@@ -14,7 +14,8 @@ export default function Page() {
   const [error, setError] = useState(null);
 
   // Your verified live tunnel endpoint link
-  const BACKEND_URL = "https://real-adults-cut.loca.lt";
+// Change this line near the top of your page.js file on GitHub:
+const BACKEND_URL = "http://127.0.0.1:8000";
 
   // Fetch current available slot rows directly from your FastAPI server
   const fetchSlotsAndData = async () => {
