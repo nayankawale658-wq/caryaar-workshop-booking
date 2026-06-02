@@ -15,20 +15,19 @@ export default function Page() {
 
   const BACKEND_URL = "https://real-adults-cut.loca.lt";
 
-  // Fetch available slots from your live FastAPI backend
   useEffect(() => {
     async function fetchSlots() {
       try {
         setLoading(true);
-        // Added standard bypass headers so localtunnel doesn't show a warning page to Vercel
         const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
+          method: "GET",
           headers: {
             "Bypass-Tunnel-Reminder": "true",
             "Content-Type": "application/json"
           }
         });
         
-        if (!response.ok) throw new Error("Failed to load time slots from database server.");
+        if (!response.ok) throw new Error("Server dropped network package handshake.");
         
         const data = await response.json();
         setSlots(data);
@@ -46,7 +45,6 @@ export default function Page() {
     fetchSlots();
   }, [workshop]);
 
-  // Handle live submission to Supabase via backend
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!selectedSlot) {
@@ -72,23 +70,17 @@ export default function Page() {
         body: JSON.stringify(bookingPayload)
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Booking failed.");
-      }
+      if (!response.ok) throw new Error("Data submission to Supabase routing channels failed.");
 
       const result = await response.json();
-      alert(`🎉 Booking Confirmed Successfully!\n\nYour record has been saved live into Supabase.`);
+      alert(`🎉 Booking Confirmed Successfully!\n\nYour record has been processed by your backend server.`);
       
-      // Add the new booking record to the live list display panel
       setMyBookings((prev) => [result, ...prev]);
-      
-      // Clear form inputs cleanly
       setName("");
       setPhone("");
       setCarReg("");
     } catch (err) {
-      alert(`❌ Error: ${err.message}`);
+      alert(`❌ Sync Error: ${err.message}`);
     }
   };
 
@@ -99,7 +91,6 @@ export default function Page() {
         <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Database Sync Engine via Vercel Cloud</p>
       </header>
 
-      {/* THE BOOKING PANEL */}
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
@@ -184,10 +175,8 @@ export default function Page() {
         </form>
       </main>
 
-      {/* LIVE ACTIVE CONSOLE */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
-        
         {myBookings.length === 0 ? (
           <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active sessions recorded in this panel view instance yet.</p>
         ) : (
