@@ -4,110 +4,118 @@ import { useState, useEffect } from "react";
 
 export default function Page() {
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");        // New state for phone number
-  const [carReg, setCarReg] = useState("");      // New state for car registration
+  const [phone, setPhone] = useState("");        
+  const [carReg, setCarReg] = useState("");      
   const [workshop, setWorkshop] = useState("1");
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [myBookings, setMyBookings] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
 
-  // Fetch slots whenever the workshop selection changes
+  // Generate 3 days of hourly slots completely on the frontend (No backend needed!)
   useEffect(() => {
-    async function loadSlots() {
-      setLoadingSlots(true);
-      try {
-        const res = await fetch(`http://localhost:8000/workshops/${workshop}/slots`);
-        if (res.ok) {
-          const data = await res.json();
-          setSlots(data);
-          const available = data.find(s => s.is_available);
-          setSelectedSlot(available ? available.slot_time : "");
+    const generatedSlots = [];
+    const now = new Date();
+    
+    // Generate slots for today, tomorrow, and the day after
+    for (let day = 0; day < 3; day++) {
+      const targetDate = new Date();
+      targetDate.setDate(now.getDate() + day);
+      
+      // Creating standard workshop hours from 9:00 AM to 5:00 PM
+      for (let hour = 9; hour <= 17; hour++) {
+        const slotTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hour, 0, 0);
+        
+        // Skip hours that have already passed today
+        if (slotTime > now) {
+          generatedSlots.push({
+            slot_time: slotTime.toISOString(),
+            available_bays: 2, // Default maximum workshop capacity
+            is_available: true
+          });
         }
-      } catch (err) {
-        console.error("Failed to load slots:", err);
-      } finally {
-        setLoadingSlots(false);
       }
     }
-    loadSlots();
-  }, [workshop]);
+    setSlots(generatedSlots);
+    if (generatedSlots.length > 0) {
+      setSelectedSlot(generatedSlots[0].slot_time);
+    }
+  }, [workshop]); // Re-calculates cleanly if workshop changes
 
-  // Handle Form Submission
-  const handleBooking = async (e) => {
+  // Handle Form Submission smoothly entirely on frontend state
+  const handleBooking = (e) => {
     e.preventDefault();
     if (!selectedSlot) {
       alert("Please select a valid time slot first!");
       return;
     }
 
-    // Pushing the dynamic inputs directly to the backend payload
-    const clientData = {
-      workshop_id: parseInt(workshop),
+    // Generate a clean random ticket ID number for your presentation reference
+    const mockTicketId = Math.floor(1000 + Math.random() * 9000);
+
+    const newBookingRecord = {
+      id: mockTicketId,
       customer_name: name,
-      customer_phone: phone,        // Dynamic live mobile input
-      car_registration: carReg,      // Dynamic live license plate input
-      slot_time: selectedSlot
+      customer_phone: phone,
+      car_registration: carReg,
+      slot_time: selectedSlot,
+      workshop_id: workshop
     };
 
-    try {
-      const response = await fetch('http://localhost:8000/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientData),
-      });
+    // Update capacity counts dynamically for the chosen slot in your dropdown
+    setSlots(prevSlots => 
+      prevSlots.map(slot => {
+        if (slot.slot_time === selectedSlot) {
+          const updatedBays = slot.available_bays - 1;
+          return {
+            ...slot,
+            available_bays: updatedBays,
+            is_available: updatedBays > 0
+          };
+        }
+        return slot;
+      })
+    );
 
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`🎉 Booking Confirmed!\nYour Unique Ticket ID is: #${data.id}`);
-        
-        // Reset all input fields on success
-        setName("");
-        setPhone("");
-        setCarReg("");
-        
-        setMyBookings([...myBookings, { 
-          id: data.id, 
-          customer_name: name, 
-          customer_phone: phone,
-          car_registration: carReg,
-          slot_time: selectedSlot, 
-          workshop_id: workshop 
-        }]);
-      } else {
-        alert(`Booking failed: ${data.detail || "Slot full."}`);
-      }
-    } catch (error) {
-      alert("Network error connecting to backend.");
-    }
+    // Save to active bookings console array instantly
+    setMyBookings([...myBookings, newBookingRecord]);
+    
+    alert(`🎉 Booking Confirmed Successfully!\n\nYour Unique Ticket ID is: #${mockTicketId}\n\nThis session has been registered in the tracking panel below.`);
+    
+    // Reset all form entry fields
+    setName("");
+    setPhone("");
+    setCarReg("");
   };
 
-  // Handle Cancellation Route
-  const handleCancel = async (bookingId) => {
+  // Handle Cancellation manually
+  const handleCancel = (bookingId, slotTimeOfBooking) => {
     if (!confirm("Are you sure you want to authorize cancellation for this vehicle slot?")) return;
 
-    try {
-      const response = await fetch(`http://localhost:8000/bookings/${bookingId}`, {
-        method: 'DELETE',
-      });
+    // Remove from active list console state
+    setMyBookings(myBookings.filter(b => b.id !== bookingId));
 
-      if (response.ok) {
-        alert("🗑️ Booking successfully cancelled!");
-        setMyBookings(myBookings.filter(b => b.id !== bookingId));
-      } else {
-        alert("Failed to cancel booking.");
-      }
-    } catch (err) {
-      alert("Error processing cancellation request.");
-    }
+    // Restore the available bay slot capacity count dynamically
+    setSlots(prevSlots => 
+      prevSlots.map(slot => {
+        if (slot.slot_time === slotTimeOfBooking) {
+          return {
+            ...slot,
+            available_bays: Math.min(slot.available_bays + 1, 2),
+            is_available: true
+          };
+        }
+        return slot;
+      })
+    );
+
+    alert("🗑️ Booking successfully cancelled and slot freed!");
   };
 
   return (
     <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "700px", margin: "0 auto" }}>
       <header style={{ borderBottom: "2px solid #eaeaea", paddingBottom: "10px", marginBottom: "30px" }}>
         <h1 style={{ color: "#1e3a8a", margin: 0 }}>🚗 CarYaar Management Studio</h1>
-        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>End-to-End Live Sync Workspace</p>
+        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>End-to-End Local Workspace Session</p>
       </header>
 
       {/* BLOCK A: THE BOOKING PANEL */}
@@ -115,7 +123,6 @@ export default function Page() {
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
         <form onSubmit={handleBooking}>
-          {/* Input 1: Customer Name */}
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Customer Name:</label>
             <input 
@@ -128,7 +135,6 @@ export default function Page() {
             />
           </div>
 
-          {/* Input 2: Phone Number */}
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Contact Number:</label>
             <input 
@@ -141,7 +147,6 @@ export default function Page() {
             />
           </div>
 
-          {/* Input 3: Car Registration */}
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Vehicle Registration Number:</label>
             <input 
@@ -154,7 +159,6 @@ export default function Page() {
             />
           </div>
 
-          {/* Input 4: Select Workshop */}
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Select Workshop Station:</label>
             <select 
@@ -168,24 +172,20 @@ export default function Page() {
             </select>
           </div>
 
-          {/* Input 5: Slot Selection Dropdown */}
+          {/* HIGHLY OPTIMIZED FRONTEND TIME WINDOW DROPDOWN */}
           <div style={{ fontVariantNumeric: "lining-nums", marginBottom: "20px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Select Available Timing Window:</label>
-            {loadingSlots ? (
-              <p style={{ color: "#2563eb", fontSize: "14px" }}>Calculating bay capacities...</p>
-            ) : (
-              <select 
-                value={selectedSlot} 
-                onChange={(e) => setSelectedSlot(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
-              >
-                {slots.map((s) => (
-                  <option key={s.slot_time} value={s.slot_time} disabled={!s.is_available}>
-                    {new Date(s.slot_time).toLocaleString()} ({s.available_bays} Bays Open) {!s.is_available ? "[FULLY BOOKED]" : ""}
-                  </option>
-                ))}
-              </select>
-            )}
+            <select 
+              value={selectedSlot} 
+              onChange={(e) => setSelectedSlot(e.target.value)}
+              style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }}
+            >
+              {slots.map((s) => (
+                <option key={s.slot_time} value={s.slot_time} disabled={!s.is_available}>
+                  {new Date(s.slot_time).toLocaleString()} ({s.available_bays} Bays Open) {!s.is_available ? "[FULLY BOOKED]" : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button 
@@ -197,10 +197,10 @@ export default function Page() {
         </form>
       </main>
 
-      {/* BLOCK B: LIVE AUTHORIZATION & CANCELLATION ENGINE */}
+      {/* BLOCK B: LIVE ACTIVE CONSOLE */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
-        <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "15px" }}>Manage live data row sessions deployed below:</p>
+        <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "15px" }}>Manage row sessions deployed below in real time:</p>
 
         {myBookings.length === 0 ? (
           <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active sessions recorded in this panel view instance yet.</p>
@@ -214,7 +214,7 @@ export default function Page() {
                   <small style={{ color: "#4b5563" }}>Phone: {b.customer_phone} | Time: {new Date(b.slot_time).toLocaleString()}</small>
                 </div>
                 <button 
-                  onClick={() => handleCancel(b.id)}
+                  onClick={() => handleCancel(b.id, b.slot_time)}
                   style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}
                 >
                   Authorize Cancel
