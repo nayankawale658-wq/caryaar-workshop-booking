@@ -15,6 +15,7 @@ export default function Page() {
 
   // Your verified live tunnel endpoint link
 // Change this line near the top of your page.js file on GitHub:
+// Change line 16 in your laptop's page.js to look exactly like this:
 const BACKEND_URL = "http://127.0.0.1:8000";
 
   // Fetch current available slot rows directly from your FastAPI server
