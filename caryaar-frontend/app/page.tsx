@@ -2,52 +2,58 @@
 
 import { useState, useEffect } from "react";
 
+interface Slot {
+  slot_time: string;
+  available_bays: number;
+  workshop_id: number;
+}
+
+interface Booking {
+  id: number;
+  customer_name: string;
+  customer_phone: string;
+  car_registration: string;
+  slot_time: string;
+  workshop_id: number;
+}
+
 export default function Page() {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");        
-  const [carReg, setCarReg] = useState("");      
-  const [workshop, setWorkshop] = useState("1");
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState("");
-  const [myBookings, setMyBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [name, setName] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");        
+  const [carReg, setCarReg] = useState<string>("");      
+  const [workshop, setWorkshop] = useState<string>("1");
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string>("");
+  const [myBookings, setMyBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Your verified live tunnel endpoint link
-// Change this line near the top of your page.js file on GitHub:
-// Change line 16 in your laptop's page.js to look exactly like this:
-const BACKEND_URL = "http://127.0.0.1:8000";
+  // Hardwired straight to your local laptop backend engine on port 8000
+  const BACKEND_URL = "http://127.0.0.1:8000";
 
-  // Fetch current available slot rows directly from your FastAPI server
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
         method: "GET",
-        headers: {
-          "Bypass-Tunnel-Reminder": "true",
-          "cors-proxy-bypass": "true",
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        }
+        headers: { "Content-Type": "application/json" }
       });
       
-      if (!response.ok) throw new Error("Server dropped handshake packet validation data.");
+      if (!response.ok) throw new Error("Local backend rejected network validation call.");
       
       const data = await response.json();
       setSlots(data);
       
-      // Auto-point to the first slot that has open bays
-      const openSlot = data.find(s => s.available_bays > 0);
+      const openSlot = data.find((s: Slot) => s.available_bays > 0);
       if (openSlot) {
         setSelectedSlot(openSlot.slot_time);
       } else if (data.length > 0) {
         setSelectedSlot(data[0].slot_time);
       }
       setError(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Could not connect to live database backend tunnel.");
+      setError("Could not connect to local backend engine server.");
     } finally {
       setLoading(false);
     }
@@ -57,11 +63,10 @@ const BACKEND_URL = "http://127.0.0.1:8000";
     fetchSlotsAndData();
   }, [workshop]);
 
-  // Handle live submission to Supabase database
-  const handleBooking = async (e) => {
+  const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlot) {
-      alert("Please choose a valid timing window first.");
+      alert("Please choose an available slot timing window first.");
       return;
     }
 
@@ -76,61 +81,40 @@ const BACKEND_URL = "http://127.0.0.1:8000";
     try {
       const response = await fetch(`${BACKEND_URL}/bookings`, {
         method: "POST",
-        headers: {
-          "Bypass-Tunnel-Reminder": "true",
-          "cors-proxy-bypass": "true",
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingPayload)
       });
 
-      if (!response.ok) {
-        const errDetail = await response.json();
-        throw new Error(errDetail.detail || "Booking failed.");
-      }
+      if (!response.ok) throw new Error("Booking submission failed.");
 
       const result = await response.json();
-      alert(`🎉 Booking Confirmed!\n\nSaved live into Supabase with Ticket ID #${result.id}`);
+      alert(`🎉 Booking Confirmed!\n\nTicket ID Assigned: #${result.id}`);
       
-      // Push record instantly onto the tracking log panel view
       setMyBookings((prev) => [result, ...prev]);
-      
-      // Force refresh database slot capacity choices instantly
-      fetchSlotsAndData();
+      fetchSlotsAndData(); // Instantly refresh layout slot capacities 
 
-      // Clear layout fields cleanly
       setName("");
       setPhone("");
       setCarReg("");
-    } catch (err) {
-      alert(`❌ Submission Error: ${err.message}`);
+    } catch (err: any) {
+      alert(`❌ Sync Error: ${err.message}`);
     }
   };
 
-  // Handle Cancellation request line (Deletes data straight out of Supabase table rows)
-  const handleCancel = async (bookingId) => {
+  const handleCancel = async (bookingId: number) => {
     if (!confirm(`Are you sure you want to authorize cancellation for Ticket #${bookingId}?`)) return;
 
     try {
       const response = await fetch(`${BACKEND_URL}/bookings/${bookingId}`, {
-        method: "DELETE",
-        headers: { 
-          "Bypass-Tunnel-Reminder": "true",
-          "cors-proxy-bypass": "true"
-        }
+        method: "DELETE"
       });
 
-      if (!response.ok) throw new Error("Failed to drop database target index item row.");
+      if (!response.ok) throw new Error("Failed to drop entry row.");
 
-      alert(`🗑️ Ticket #${bookingId} canceled and dropped from Supabase tables successfully!`);
-      
-      // Update screen state array listing rows
+      alert(`🗑️ Ticket #${bookingId} successfully dropped from dashboard rows!`);
       setMyBookings((prev) => prev.filter(b => b.id !== bookingId));
-      
-      // Sync layout dropdown limits back up immediately
-      fetchSlotsAndData();
-    } catch (err) {
+      fetchSlotsAndData(); // Instantly open back up slot bay capacities
+    } catch (err: any) {
       alert(`❌ Cancellation Error: ${err.message}`);
     }
   };
@@ -139,10 +123,9 @@ const BACKEND_URL = "http://127.0.0.1:8000";
     <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "700px", margin: "0 auto" }}>
       <header style={{ borderBottom: "2px solid #eaeaea", paddingBottom: "10px", marginBottom: "30px" }}>
         <h1 style={{ color: "#1e3a8a", margin: 0 }}>🚗 CarYaar Management Studio</h1>
-        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Database Sync Engine via Vercel Cloud</p>
+        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Local System Studio Pipeline Engine</p>
       </header>
 
-      {/* SECTION 1: SYSTEM BOOKING INTERFACE PANEL */}
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "20px", color: "#1f2937" }}>Secure Your Appointment Slot</h2>
         
@@ -215,7 +198,6 @@ const BACKEND_URL = "http://127.0.0.1:8000";
         </form>
       </main>
 
-      {/* SECTION 2: LIVE RUNTIME MANAGEMENT OPERATOR PANEL */}
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
         {myBookings.length === 0 ? (
