@@ -34,7 +34,7 @@ export default function Page() {
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
+     const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
@@ -79,7 +79,7 @@ export default function Page() {
     };
 
     try {
-      const response = await fetch(`${BACKEND_URL}/bookings`, {
+      const response = await fetch(${BACKEND_URL}/bookings, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingPayload)
