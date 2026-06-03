@@ -29,7 +29,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
 
   // Hardwired straight to your local laptop backend engine on port 8000
-  const BACKEND_URL = "http://127.0.0.1:8000 ";
+  const BACKEND_URL = "https://caryaar-workshop-booking-production.up.railway.app";
 
   const fetchSlotsAndData = async () => {
     try {
