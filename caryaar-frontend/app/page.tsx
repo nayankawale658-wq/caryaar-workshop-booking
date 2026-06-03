@@ -34,12 +34,13 @@ export default function Page() {
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
-     const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" }
+      setError(null);
+      // FIXED: Removed body-headers content block for optimized cloud latency
+      const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
+        method: "GET"
       });
       
-      if (!response.ok) throw new Error("Local backend rejected network validation call.");
+      if (!response.ok) throw new Error("Cloud backend rejected network validation call.");
       
       const data = await response.json();
       setSlots(data);
@@ -50,10 +51,9 @@ export default function Page() {
       } else if (data.length > 0) {
         setSelectedSlot(data[0].slot_time);
       }
-      setError(null);
     } catch (err: any) {
       console.error(err);
-      setError("Could not connect to local backend engine server.");
+      setError("Could not connect to live cloud pipeline engine server.");
     } finally {
       setLoading(false);
     }
