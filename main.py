@@ -15,10 +15,7 @@ app = FastAPI()
 # FIXED: Replaced brittle single-use Vercel preview URL with general access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://caryaar-frontend.vercel.app",
-        "https://caryaar-frontend-nknvyixpw-nayankawale658-wqs-projects.vercel.app"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
