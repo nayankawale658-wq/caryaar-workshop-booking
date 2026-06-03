@@ -102,3 +102,9 @@ def cancel_booking(booking_id: int):
         return {"status": "success"}
     except Exception as e:
         return {"status": "success", "mock": True}
+#5 get booking 
+@app.get("/bookings")
+async def get_bookings(workshop_id: int = None):
+    if workshop_id:
+        return supabase.table("bookings").select("*").eq("workshop_id", workshop_id).execute().data
+    return supabase.table("bookings").select("*").execute().data
