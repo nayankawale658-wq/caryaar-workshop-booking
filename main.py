@@ -64,7 +64,7 @@ def get_slots(workshop_id: int = Query(1)):
         ]
 
 # 3. POST BOOKING DISPATCH (SAVES LIVE INTO THE SINGULAR 'BOOKING' TABLE)
-@app.post("/bookings")
+@app.post("/booking")
 def create_booking(payload: BookingSchema):
     try:
         print(f"\n📥 Received incoming booking request for: {payload.customer_name}")
@@ -95,7 +95,7 @@ def create_booking(payload: BookingSchema):
         }
 
 # 4. DELETE ROW COMMAND FROM SUPABASE TABLES
-@app.delete("/bookings/{booking_id}")
+@app.delete("/booking/{booking_id}")
 def cancel_booking(booking_id: int):
     try:
         supabase.table("booking").delete().eq("id", booking_id).execute()
@@ -103,7 +103,7 @@ def cancel_booking(booking_id: int):
     except Exception as e:
         return {"status": "success", "mock": True}
         
-@app.get("/bookings")
+@app.get("/booking")
 async def get_booking(workshop_id: int = None):
     try:
         if workshop_id:
