@@ -10,7 +10,7 @@ app = FastAPI()
 # 1. ALLOW FULL ACCESS FROM LOCALHOST FRONTEND
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000","https://caryaar-workshop-booking-8qw24y0v4-nayankawale658-wqs-projects.vercel.app"],
+    allow_origins=["https://caryaar-workshop-booking-8qw24y0v4-nayankawale658-wqs-projects.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
