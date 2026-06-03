@@ -79,7 +79,7 @@ export default function Page() {
     };
 
     try {
-      const response = await fetch(${BACKEND_URL}/bookings, {
+      const response = await fetch(`${BACKEND_URL}/booking`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingPayload)
@@ -105,7 +105,7 @@ export default function Page() {
     if (!confirm(`Are you sure you want to authorize cancellation for Ticket #${bookingId}?`)) return;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/bookings/${bookingId}`, {
+      const response = await fetch(`${BACKEND_URL}/booking/${bookingId}`, {
         method: "DELETE"
       });
 
