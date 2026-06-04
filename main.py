@@ -12,6 +12,7 @@ import random
 
 app = FastAPI()
 origins = [
+    "https://caryaar-frontend-live.onrender.com",
     "https://tubular-blini-8f41f8.netlify.app",
     "http://localhost:3000"
 ]
