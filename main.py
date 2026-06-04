@@ -11,11 +11,14 @@ from supabase import create_client, Client
 import random
 
 app = FastAPI()
+origins = [
+    "https://tubular-blini-8f41f8.netlify.app",
+    "http://localhost:3000"
+]
 
-# FIXED: Replaced brittle single-use Vercel preview URL with general access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
