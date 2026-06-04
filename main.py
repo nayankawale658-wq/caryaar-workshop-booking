@@ -11,18 +11,12 @@ from supabase import create_client, Client
 import random
 
 app = FastAPI()
-origins = [
-    "https://caryaar-frontend-live.onrender.com",
-    "https://tubular-blini-8f41f8.netlify.app",
-    "http://localhost:3000"
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allows all domains, including your new Render frontend
+    allow_credentials=False,  # Set to False so wildcard origins are accepted without security drops
+    allow_methods=["*"],  # Allows GET, POST, DELETE, etc.
+    allow_headers=["*"],  # Allows all headers
 )
 
 SUPABASE_URL = "https://hvooyoifcbbhhsoqikbs.supabase.co"
