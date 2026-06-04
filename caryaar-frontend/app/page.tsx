@@ -30,6 +30,7 @@ export default function Page() {
 
   // Hardwired straight to your local laptop backend engine on port 8000
   const BACKEND_URL = "https://caryaar-workshop-booking.onrender.com";
+  
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
