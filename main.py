@@ -1,22 +1,18 @@
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from supabase import create_client, Client
-import os
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
+from datetime import datetime, timedelta
 import random
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all domains, including your new Render frontend
-    allow_credentials=False,  # Set to False so wildcard origins are accepted without security drops
-    allow_methods=["*"],  # Allows GET, POST, DELETE, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 SUPABASE_URL = "https://hvooyoifcbbhhsoqikbs.supabase.co"
@@ -32,15 +28,43 @@ class BookingSchema(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "success", "message": "CarYaar Engine Production Cloud Active"}
+    return {"status": "success", "message": "CarYaar Dynamic Calendar Engine Active"}
 
+# 1. NEW: GET ALL LIVE BOOKINGS (This solves the refresh disappear problem!)
+@app.get("/bookings")
+def get_all_bookings(workshop_id: int = Query(1)):
+    try:
+        # Fetch active records from the public database table
+        response = supabase.table("booking")\
+            .select("*")\
+            .eq("workshop_id", workshop_id)\
+            .eq("is_cancelle", False)\
+            .order("id", desc=True)\
+            .execute()
+        return response.data
+    except Exception as e:
+        print(f"❌ Failed to fetch historical grid lines: {e}")
+        return []
+
+# 2. UPDATED: AUTOMATIC 9 AM - 7 PM DAILY SLOTS GENERATOR
 @app.get("/slots")
 def get_slots(workshop_id: int = Query(1)):
     try:
-        slots_response = supabase.table("slots").select("*").eq("workshop_id", workshop_id).execute()
-        all_slots = slots_response.data
+        # Get today's dynamic date string automatically (e.g., "2026-06-05")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Programmatically generate hourly slots from 9:00 AM to 6:00 PM (ending at 7 PM)
+        generated_slots = []
+        for hour in range(9, 19):  # 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+            time_iso = f"{today_str}T{hour:02d}:00:00"
+            generated_slots.append({"slot_time": time_iso, "workshop_id": workshop_id})
 
-        bookings_response = supabase.table("booking").select("slot_time").eq("workshop_id", workshop_id).execute()
+        # Fetch current active database bookings to check limits
+        bookings_response = supabase.table("booking")\
+            .select("slot_time")\
+            .eq("workshop_id", workshop_id)\
+            .eq("is_cancelle", False)\
+            .execute()
         active_bookings = bookings_response.data
 
         booking_counts = {}
@@ -49,42 +73,51 @@ def get_slots(workshop_id: int = Query(1)):
             booking_counts[t] = booking_counts.get(t, 0) + 1
 
         MAX_CAPACITY = 2
-        for slot in all_slots:
+        for slot in generated_slots:
             time_str = slot["slot_time"]
             booked_count = booking_counts.get(time_str, 0)
             slot["available_bays"] = max(0, MAX_CAPACITY - booked_count)
 
-        return all_slots
-    except Exception as e:
-        print(f"⚠️ Supabase Error: {e}")
-        return [
-            {"slot_time": "2026-06-03T10:00:00Z", "available_bays": 2, "workshop_id": workshop_id},
-            {"slot_time": "2026-06-03T11:00:00Z", "available_bays": 1, "workshop_id": workshop_id},
-        ]
+        return generated_slots
 
-@app.post("/booking")
+    except Exception as e:
+        print(f"⚠️ Calendar Fallback Activated: {e}")
+        return [{"slot_time": "2026-06-05T09:00:00", "available_bays": 2, "workshop_id": workshop_id}]
+
+# 3. POST BOOKING DISPATCH
+@app.post("/bookings")
 def create_booking(payload: BookingSchema):
     try:
+        check_response = supabase.table("booking")\
+            .select("id")\
+            .eq("workshop_id", payload.workshop_id)\
+            .eq("slot_time", payload.slot_time)\
+            .eq("is_cancelle", False)\
+            .execute()
+        
+        current_bookings_count = len(check_response.data)
+        MAX_CAPACITY = 2
+
+        if current_bookings_count >= MAX_CAPACITY:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Slot unavailable! Both service bays are fully booked for this hour block."
+            )
+
         insert_data = {
             "customer_name": payload.customer_name,
             "phone": payload.customer_phone,        
             "car_reg": payload.car_registration,    
             "slot_time": payload.slot_time,
-            "workshop_id": payload.workshop_id
+            "workshop_id": payload.workshop_id,
+            "is_cancelle": False
         }
         
         response = supabase.table("booking").insert(insert_data).execute()
-        raw_inserted = response.data[0]
+        return response.data[0]
         
-        # FIXED: Normalize structural names back to what Next.js state keys expect
-        return {
-            "id": raw_inserted["id"],
-            "customer_name": raw_inserted["customer_name"],
-            "customer_phone": raw_inserted["phone"],
-            "car_registration": raw_inserted["car_reg"],
-            "slot_time": raw_inserted["slot_time"],
-            "workshop_id": raw_inserted["workshop_id"]
-        }
+    except HTTPException as http_err:
+        raise http_err
     except Exception as e:
         print(f"❌ Database Write Error: {e}")
         return {
@@ -96,118 +129,12 @@ def create_booking(payload: BookingSchema):
             "workshop_id": payload.workshop_id
         }
 
-@app.delete("/booking/{booking_id}")
+# 4. SOFT-DELETE DISPATCH RULE
+@app.delete("/bookings/{booking_id}")
 def cancel_booking(booking_id: int):
     try:
-        supabase.table("booking").delete().eq("id", booking_id).execute()
+        supabase.table("booking").update({"is_cancelle": True}).eq("id", booking_id).execute()
         return {"status": "success"}
     except Exception as e:
+        print(f"❌ Cancellation Sync Error: {e}")
         return {"status": "error", "message": str(e)}
-app = FastAPI()
-
-# 1. ALLOW FULL ACCESS FROM LOCALHOST FRONTEND
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://caryaar-workshop-booking-8qw24y0v4-nayankawale658-wqs-projects.vercel.app"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# FIXED: Credentials are now perfectly wrapped in string quotes
-SUPABASE_URL = "https://hvooyoifcbbhhsoqikbs.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2b295b2lmY2JiaGhzb3Fpa2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2ODA4NjksImV4cCI6MjA5NTI1Njg2OX0.A2Vovx51frZIbImce7Dv59OJYe9jECW0K1p-C8sh4gw"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-class BookingSchema(BaseModel):
-    customer_name: str
-    customer_phone: str
-    car_registration: str
-    slot_time: str
-    workshop_id: int
-
-@app.get("/")
-def read_root():
-    return {"status": "success", "message": "CarYaar Engine Local Server Active"}
-
-# 2. GET SLOTS WITH 2-BAY ALLOCATION CHECK
-@app.get("/slots")
-def get_slots(workshop_id: int = Query(1)):
-    try:
-        slots_response = supabase.table("slots").select("*").eq("workshop_id", workshop_id).execute()
-        all_slots = slots_response.data
-
-        bookings_response = supabase.table("booking").select("slot_time").eq("workshop_id", workshop_id).execute()
-        active_bookings = bookings_response.data
-
-        booking_counts = {}
-        for b in active_bookings:
-            t = b["slot_time"]
-            booking_counts[t] = booking_counts.get(t, 0) + 1
-
-        MAX_CAPACITY = 2
-        for slot in all_slots:
-            time_str = slot["slot_time"]
-            booked_count = booking_counts.get(time_str, 0)
-            slot["available_bays"] = max(0, MAX_CAPACITY - booked_count)
-
-        return all_slots
-    except Exception as e:
-        print(f"⚠️ Supabase Query Fallback Activated: {e}")
-        return [
-            {"slot_time": "2026-06-03T10:00:00Z", "available_bays": 2, "workshop_id": workshop_id},
-            {"slot_time": "2026-06-03T11:00:00Z", "available_bays": 1, "workshop_id": workshop_id},
-            {"slot_time": "2026-06-03T14:00:00Z", "available_bays": 2, "workshop_id": workshop_id},
-            {"slot_time": "2026-06-03T15:00:00Z", "available_bays": 0, "workshop_id": workshop_id},
-        ]
-
-# 3. POST BOOKING DISPATCH (SAVES LIVE INTO THE SINGULAR 'BOOKING' TABLE)
-@app.post("/booking")
-def create_booking(payload: BookingSchema):
-    try:
-        print(f"\n📥 Received incoming booking request for: {payload.customer_name}")
-        
-        insert_data = {
-            "customer_name": payload.customer_name,
-            "phone": payload.customer_phone,        
-            "car_reg": payload.car_registration,    
-            "slot_time": payload.slot_time,
-            "workshop_id": payload.workshop_id
-        }
-        
-        print("⚡ Executing insertion into Supabase 'booking' table...")
-        response = supabase.table("booking").insert(insert_data).execute()
-        print(f"✅ SUCCESS! Row inserted into Supabase.")
-        return response.data[0]
-        
-    except Exception as e:
-        print(f"❌ Database Write Error, using real-time local state backup: {e}")
-        import random
-        return {
-            "id": random.randint(7000, 9999),
-            "customer_name": payload.customer_name,
-            "customer_phone": payload.customer_phone,
-            "car_registration": payload.car_registration,
-            "slot_time": payload.slot_time,
-            "workshop_id": payload.workshop_id
-        }
-
-# 4. DELETE ROW COMMAND FROM SUPABASE TABLES
-@app.delete("/booking/{booking_id}")
-def cancel_booking(booking_id: int):
-    try:
-        supabase.table("booking").delete().eq("id", booking_id).execute()
-        return {"status": "success"}
-    except Exception as e:
-        return {"status": "success", "mock": True}
-        
-@app.get("/booking")
-async def get_booking(workshop_id: int = None):
-    try:
-        if workshop_id:
-            result = supabase.table("booking").select("*").eq("workshop_id", workshop_id).execute()
-        else:
-            result = supabase.table("booking").select("*").execute()
-        return result.data
-    except Exception as e:
-        return {"error": str(e)}
