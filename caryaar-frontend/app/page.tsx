@@ -11,8 +11,11 @@ interface Slot {
 interface Booking {
   id: number;
   customer_name: string;
-  customer_phone: string;
-  car_registration: string;
+  // Aligned backend field mapping tags
+  phone?: string; 
+  customer_phone?: string;
+  car_reg?: string;
+  car_registration?: string;
   slot_time: string;
   workshop_id: number;
 }
@@ -28,39 +31,49 @@ export default function Page() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Hardwired straight to your local laptop backend engine on port 8000
-  const BACKEND_URL = "https://caryaar-workshop-booking.onrender.com";
-  
+  const BACKEND_URL = "http://localhost:8000";
+
   const fetchSlotsAndData = async () => {
     try {
       setLoading(true);
-      setError(null);
-      // FIXED: Removed body-headers content block for optimized cloud latency
-      const response = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`, {
-        method: "GET"
-      });
       
-      if (!response.ok) throw new Error("Cloud backend rejected network validation call.");
+      // 1. Fetch live generated 1-hour schedule windows
+      const slotsRes = await fetch(`${BACKEND_URL}/slots?workshop_id=${workshop}`);
+      if (!slotsRes.ok) throw new Error("Could not sync daily calendar timings.");
+      const slotsData = await slotsRes.json();
+      setSlots(slotsData);
       
-      const data = await response.json();
-      setSlots(data);
-      
-      const openSlot = data.find((s: Slot) => s.available_bays > 0);
+      // 2. FIXED: Fetch saved historical database rows so they don't disappear on refresh
+      const bookingsRes = await fetch(`${BACKEND_URL}/bookings?workshop_id=${workshop}`);
+      if (bookingsRes.ok) {
+        const bookingsData = await bookingsRes.json();
+        setMyBookings(bookingsData);
+      }
+
+      // Automatically highlight the first open bay option
+      const openSlot = slotsData.find((s: Slot) => s.available_bays > 0);
       if (openSlot) {
         setSelectedSlot(openSlot.slot_time);
-      } else if (data.length > 0) {
-        setSelectedSlot(data[0].slot_time);
+      } else if (slotsData.length > 0) {
+        setSelectedSlot(slotsData[0].slot_time);
       }
+      
+      setError(null);
     } catch (err: any) {
       console.error(err);
-      setError("Could not connect to live cloud pipeline engine server.");
+      setError("Could not link up database engine streams.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSlotsAndData();
+    const handleRouterSync = () => {
+      fetchSlotsAndData();
+    };
+
+    const frameId = requestAnimationFrame(handleRouterSync);
+    return () => cancelAnimationFrame(frameId);
   }, [workshop]);
 
   const handleBooking = async (e: React.FormEvent) => {
@@ -79,25 +92,27 @@ export default function Page() {
     };
 
     try {
-      const response = await fetch(`${BACKEND_URL}/booking`, {
+      const response = await fetch(`${BACKEND_URL}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingPayload)
       });
 
-      if (!response.ok) throw new Error("Booking submission failed.");
-
       const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Cap block triggered.");
+      }
+
       alert(`🎉 Booking Confirmed!\n\nTicket ID Assigned: #${result.id}`);
       
-      setMyBookings((prev) => [result, ...prev]);
-      fetchSlotsAndData(); // Instantly refresh layout slot capacities 
-
       setName("");
       setPhone("");
       setCarReg("");
+      
+      fetchSlotsAndData(); // Automatically pulls the new row down to your console grid views
     } catch (err: any) {
-      alert(`❌ Sync Error: ${err.message}`);
+      alert(`❌ Booking Failed: ${err.message}`);
     }
   };
 
@@ -105,15 +120,14 @@ export default function Page() {
     if (!confirm(`Are you sure you want to authorize cancellation for Ticket #${bookingId}?`)) return;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/booking/${bookingId}`, {
+      const response = await fetch(`${BACKEND_URL}/bookings/${bookingId}`, {
         method: "DELETE"
       });
 
-      if (!response.ok) throw new Error("Failed to drop entry row.");
+      if (!response.ok) throw new Error("Database rejected cancellation update row query mapping.");
 
-      alert(`🗑️ Ticket #${bookingId} successfully dropped from dashboard rows!`);
-      setMyBookings((prev) => prev.filter(b => b.id !== bookingId));
-      fetchSlotsAndData(); // Instantly open back up slot bay capacities
+      alert(`🗑️ Ticket #${bookingId} updated to cancelled configuration logs!`);
+      fetchSlotsAndData(); // Instantly update frontend console maps layout structure
     } catch (err: any) {
       alert(`❌ Cancellation Error: ${err.message}`);
     }
@@ -123,7 +137,7 @@ export default function Page() {
     <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "700px", margin: "0 auto" }}>
       <header style={{ borderBottom: "2px solid #eaeaea", paddingBottom: "10px", marginBottom: "30px" }}>
         <h1 style={{ color: "#1e3a8a", margin: 0 }}>🚗 CarYaar Management Studio</h1>
-        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Local System Studio Pipeline Engine</p>
+        <p style={{ color: "#6b7280", margin: "5px 0 0 0" }}>Live Automated Schedule & Persistent History Dashboard</p>
       </header>
 
       <main style={{ background: "#f9fafb", padding: "25px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "40px" }}>
@@ -172,7 +186,7 @@ export default function Page() {
           <div style={{ fontVariantNumeric: "lining-nums", marginBottom: "20px" }}>
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>Select Available Timing Window:</label>
             {loading ? (
-              <p style={{ color: "#2563eb", margin: "5px 0" }}>📡 Scanning live database channels...</p>
+              <p style={{ color: "#2563eb", margin: "5px 0" }}>📡 Syncing daily hours channel charts...</p>
             ) : error ? (
               <p style={{ color: "#dc2626", margin: "5px 0" }}>⚠️ {error}</p>
             ) : (
@@ -182,7 +196,7 @@ export default function Page() {
               >
                 {slots.map((s) => (
                   <option key={s.slot_time} value={s.slot_time} disabled={s.available_bays <= 0}>
-                    {new Date(s.slot_time).toLocaleString()} ({s.available_bays} / 2 Bays Open) {s.available_bays <= 0 ? "[FULLY BOOKED]" : ""}
+                    {new Date(s.slot_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ({s.available_bays} / 2 Bays Open) {s.available_bays <= 0 ? "[FULLY BOOKED]" : ""}
                   </option>
                 ))}
               </select>
@@ -201,15 +215,15 @@ export default function Page() {
       <section style={{ background: "#fff", padding: "25px", borderRadius: "8px", border: "1px solid #ef4444" }}>
         <h2 style={{ fontSize: "18px", marginBottom: "15px", color: "#b91c1c" }}>🛡️ Active Bookings Authorization Console</h2>
         {myBookings.length === 0 ? (
-          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active sessions recorded in this panel view instance yet.</p>
+          <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "14px" }}>No active database entries logged for this workshop workspace segment yet.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {myBookings.map((b) => (
               <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fef2f2" }}>
                 <div>
-                  <span style={{ fontWeight: "bold", color: "#111827" }}>Ticket #{b.id}</span> — {b.customer_name} ({b.car_registration})
+                  <span style={{ fontWeight: "bold", color: "#111827" }}>Ticket #{b.id}</span> — {b.customer_name} ({b.car_reg || b.car_registration})
                   <br />
-                  <small style={{ color: "#4b5563" }}>Allocated Time: {new Date(b.slot_time).toLocaleString()}</small>
+                  <small style={{ color: "#4b5563" }}>Hour Allocation Block: {new Date(b.slot_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small>
                 </div>
                 <button 
                   onClick={() => handleCancel(b.id)}
