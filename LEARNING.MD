@@ -1,21 +1,28 @@
-# Engineering Learnings Log - CarYaar
+# 🧠 Project Learnings & Technical Takeaways
 
-This document summarizes the technical knowledge and troubleshooting strategies gained while building the full-stack workshop reservation tracking application.
+Developing the CarYaar Workshop Booking pipeline provided deep insights into cross-platform execution, API synchronization patterns, and the realities of production engineering bugs.
 
 ---
 
-## 1. Cloud Infrastructure & Proxy Handshakes
-* **What I Learned**: Discovered how multi-tenant cloud architectures (like Supabase) leverage Server Name Indication (SNI) and routing proxies to map connections. 
-* **Key Takeaway**: When encountering errors like `tenant/user not found`, checking configuration parameters like pooler string delimiters (dots vs hyphens) and using explicit encryption parameters (`sslmode`) is critical to direct packets through a shared cloud proxy network.
+## 1. Endpoint Alignment & Pluralization
+* **The Takeaway:** We discovered that a mismatch between frontend request paths (`/bookings`) and backend route declarations (`/booking`) results in immediate silent drops (`404 Not Found`). Consistent RESTful API routing structures must be established and explicitly mapped out before writing code.
 
-## 2. Debugging Cross-Origin Resource Sharing (CORS)
-* **What I Learned**: Experienced how modern web browsers execute security mechanisms to isolate web environments running across differing local network ports (`localhost:3000` vs `127.0.0.1:8000`).
-* **Key Takeaway**: Integrating FastAPI's specialized `CORSMiddleware` engine with precise header parameters (`allow_origins`, `allow_methods`) is mandatory to establish clear handshakes between client user interfaces and server APIs.
+---
 
-## 3. Dynamic Schema Alignment & ORM Errors
-* **What I Learned**: Deepened understanding of SQLAlchemy tracking mechanisms when parsing raw queries. Faced the infamous `f405` programming errors when column names do not map seamlessly.
-* **Key Takeaway**: Meticulous alignment between database tables, schema interfaces, and system modules prevents breaking serialization crashes during live execution.
+## 2. UI Thread Safe Hydration
+* **The Takeaway:** We learned that firing database data fetches the exact millisecond a page loads can outrun the framework's native page router initialization, triggering critical Next.js lifecycle hook crashes. Wrapping your startup functions inside **`requestAnimationFrame()`** allows the UI to render smoothly before fetching data.
 
-## 4. Time Slot Generation Logic
-* **What I Learned**: Formulated logical loops to dynamically construct operational timestamps tracking business openings across a 3-day window.
-* **Key Takeaway**: Handling text-based timestamp formatting correctly ensures that dates map accurately from database rows to frontend dropdown options across different system locations.
+---
+
+## 3. Database Constraints over Frontend UI Controls
+* **The Takeaway:** We learned that you cannot rely on frontend disabling rules alone to protect data limits or workshop capacity. True security must be handled inside your backend logic blocks using strict operational verification steps to successfully block over-booking attempts or forced API script injections.
+
+---
+
+## 4. ARM64 Native Compilation Obstacles (Termux Environments)
+* **The Takeaway:** Running node applications and python libraries inside Termux on phone processors showed us that some packages (like `pydantic-core` or `Next Turbopack`) require manual local system compilers (`rust`, `clang`, `make`, `webpack`) to build successfully on mobile hardware. Compiling native wheels directly on mobile chips is a crucial skill for edge computing.
+
+---
+
+## 5. State Reset Mitigation via Persistent Feeds
+* **The Takeaway:** We realized that standard React memory states reset to an empty array `[]` upon a simple page refresh, causing customer booking displays to disappear. Migrating the active session view panel to run an on-mount API call directly to the Supabase backend ensures that customer records stay perfectly visible even after a browser reload.
